@@ -81,8 +81,6 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
 
 export default function DinnerPlanner() {
   const [screen, setScreen] = useState("home");
-  const [apiKey, setApiKey] = useState("");
-  const [apiKeySaved, setApiKeySaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [weekPlan, setWeekPlan] = useState(null);
@@ -100,11 +98,6 @@ export default function DinnerPlanner() {
   const today = new Date();
   const weekLabel = `${today.getMonth() + 1}月${today.getDate()}日起一周`;
 
-  const saveKey = () => {
-    if (!apiKey.trim()) return;
-    window.DEEPSEEK_API_KEY = apiKey.trim();
-    setApiKeySaved(true);
-  };
 
   const WEEK_PROMPT = `你是专业家庭营养师。为四口之家（含老人和小孩）制定本周7天晚餐菜单。
 规则：
@@ -187,8 +180,6 @@ export default function DinnerPlanner() {
         .h-title span{color:#c87818}
         .h-sub{font-size:13px;color:#887860;line-height:1.7}
 
-        /* API KEY 输入区 */
-        .key-box{margin:18px 20px 0;padding:16px;background:#fff;border:1.5px solid #e8e2d8;border-radius:14px}
         .key-title{font-size:13px;font-weight:600;color:#2a2418;margin-bottom:4px}
         .key-sub{font-size:11px;color:#9a8e78;margin-bottom:10px;line-height:1.5}
         .key-row{display:flex;gap:8px}
@@ -348,7 +339,7 @@ export default function DinnerPlanner() {
       {loading && (
         <div className="sc ld-sc">
           <div className="ld-bowl">🥘</div>
-          <div className="ld-t">DeepSeek 正在规划本周菜单…</div>
+          <div className="ld-t">AI 正在规划本周菜单…</div>
           <div className="ld-s">正在为四口之家精心搭配7天晚餐</div>
           <div className="ld-steps">
             {["规划每日蛋白质轮换", "考虑相邻食材衔接利用剩菜", "生成整周购物清单"].map((s, i) => (
@@ -374,35 +365,9 @@ export default function DinnerPlanner() {
       {!loading && !error && screen === "home" && (
         <div className="sc">
           <div className="h-hero">
-            <div className="h-tag">🤖 DeepSeek · 家庭晚餐助手</div>
+            <div className="h-tag">✨ AI 家庭晚餐助手</div>
             <h1 className="h-title">本周<br /><span>吃什么？</span></h1>
             <p className="h-sub">一次生成7天晚餐菜谱<br />营养均衡 · 减少剩菜 · 轻松购物</p>
-          </div>
-
-          {/* API Key 输入 */}
-          <div className="key-box">
-            <div className="key-title">🔑 填写 DeepSeek API Key</div>
-            <div className="key-sub">部署到手机后只需配置一次，本地预览需要在这里填写。</div>
-            {!apiKeySaved ? (
-              <>
-                <div className="key-row">
-                  <input
-                    className="key-in"
-                    type="password"
-                    placeholder="sk-xxxxxxxxxxxxxxxx"
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && saveKey()}
-                  />
-                  <button className="key-btn" onClick={saveKey}>确认</button>
-                </div>
-                <div className="key-link">
-                  没有 Key？前往 <a href="https://platform.deepseek.com" target="_blank" rel="noreferrer">platform.deepseek.com</a> 免费注册获取
-                </div>
-              </>
-            ) : (
-              <div className="key-saved">✓ API Key 已设置，可以开始生成菜单</div>
-            )}
           </div>
 
           <div className="h-chips">
@@ -425,9 +390,7 @@ export default function DinnerPlanner() {
             ))}
           </div>
           <div className="h-cta">
-            <button className="btn-p" onClick={fetchWeekPlan} disabled={!apiKeySaved}>
-              {apiKeySaved ? "生成本周7天菜单 ✨" : "请先填写 API Key"}
-            </button>
+            <button className="btn-p" onClick={fetchWeekPlan}>生成本周7天菜单 ✨</button>
           </div>
         </div>
       )}
