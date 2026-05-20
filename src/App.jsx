@@ -61,22 +61,19 @@ function proteinColor(p) {
 }
 
 // ── DeepSeek API 调用 ─────────────────────────────────────────
-async function callDeepSeek(prompt, maxTokens = 4000) {
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
+
+
+// ── 后端中转调用 ── API Key 安全存在服务器，前端无需填写 ──
+async function callClaude(prompt, maxTokens = 4000) {
+  const res = await fetch("/api/chat", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${window.DEEPSEEK_API_KEY || ""}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, maxTokens }),
   });
-  if (!res.ok) throw new Error("API 请求失败，请检查 API Key");
+  if (!res.ok) throw new Error("生成失败，请重试");
   const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
+  if (data.error) throw new Error(data.error);
+  return data.text || "";
 }
 
 export default function DinnerPlanner() {
@@ -111,8 +108,7 @@ export default function DinnerPlanner() {
 {"week":[{"day":"周一","theme":"主题4-6字","protein":"主蛋白","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"20分钟","tip":"贴士12字内","nutrition":"营养8字内"}],"cook_order":"一句话","total_time":"45分钟","shopping":[{"category":"肉类","emoji":"🥩","items":[{"name":"","amount":"","note":""}]}]}]}`;
 
   const fetchWeekPlan = async () => {
-    if (!window.DEEPSEEK_API_KEY) { setError("请先填写 DeepSeek API Key"); return; }
-    setLoading(true); setError(""); setWeekPlan(null);
+        setLoading(true); setError(""); setWeekPlan(null);
     try {
       const text = await callDeepSeek(WEEK_PROMPT, 4000);
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
