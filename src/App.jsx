@@ -60,9 +60,9 @@ function proteinColor(p) {
   return "#707070";
 }
 
-// 调用后端 /api/chat，API Key 安全存在服务器环境变量里
+// 调用后端 /.netlify/functions/chat，API Key 安全存在服务器环境变量里
 async function callDeepSeek(prompt, maxTokens = 4000) {
-  const res = await fetch("/api/chat", {
+  const res = await fetch("/.netlify/functions/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, maxTokens }),
