@@ -1,7 +1,15 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const DAY_EMOJIS = ["🌱", "🌿", "🍃", "🌾", "🍂", "🌻", "🌸"];
+
+// 获取本周的唯一标识（年份+第几周）
+function getWeekKey() {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const weekNum = Math.ceil(((now - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
+  return `week-${now.getFullYear()}-${weekNum}`;
+}
 
 function buildShoppingText(weekPlan, scope, dayIdx) {
   if (!weekPlan) return "";
@@ -36,6 +44,22 @@ function buildShoppingText(weekPlan, scope, dayIdx) {
   return text;
 }
 
+function buildWeekEmailText(weekPlan) {
+  if (!weekPlan) return "";
+  let text = "🍽 本周晚餐菜单\n";
+  text += "=".repeat(30) + "\n\n";
+  weekPlan.forEach(day => {
+    text += `📅 ${day.day}【${day.theme}】\n`;
+    text += `主蛋白：${day.protein}${day.has_seafood ? "（含海鲜）" : ""}\n`;
+    day.dishes.forEach(d => { text += `  ${d.emoji} ${d.name}（${d.type}·${d.difficulty}·${d.time}）\n`; });
+    if (day.leftover_note) text += `  ♻️ ${day.leftover_note}\n`;
+    text += "\n";
+  });
+  text += "=".repeat(30) + "\n";
+  text += buildShoppingText(weekPlan, "week", 0);
+  return text;
+}
+
 function mergeWeeklyShopping(weekPlan) {
   const merged = {};
   (weekPlan || []).forEach(day => {
@@ -60,8 +84,7 @@ function proteinColor(p) {
   return "#707070";
 }
 
-// 调用后端 /.netlify/functions/chat，API Key 安全存在服务器环境变量里
-async function callDeepSeek(prompt, maxTokens = 4000) {
+async function callDeepSeek(prompt, maxTokens = 5000) {
   const res = await fetch("/.netlify/functions/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -71,6 +94,21 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data.text || "";
+}
+
+async function sendEmailNotification(weekPlan) {
+  try {
+    const now = new Date();
+    const subject = `本周晚餐菜单（${now.getMonth()+1}月${now.getDate()}日起）`;
+    const text = buildWeekEmailText(weekPlan);
+    await fetch("/.netlify/functions/sendEmail", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject, text }),
+    });
+  } catch (e) {
+    console.log("邮件发送失败:", e);
+  }
 }
 
 export default function DinnerPlanner() {
@@ -87,42 +125,102 @@ export default function DinnerPlanner() {
   const [regenLoading, setRegenLoading] = useState(null);
   const [shareText, setShareText] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
+  const [emailMsg, setEmailMsg] = useState("");
   const shareRef = useRef(null);
 
   const today = new Date();
   const weekLabel = `${today.getMonth() + 1}月${today.getDate()}日起一周`;
+  const weekKey = getWeekKey();
+  const emailSentKey = `email-sent-${weekKey}`;
 
-  const WEEK_PROMPT = `你是专业家庭营养师。为四口之家（含老人和小孩）制定本周7天晚餐菜单。
+  // 启动时检查本地缓存
+  useEffect(() => {
+    const cached = localStorage.getItem(weekKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        setWeekPlan(parsed);
+        setScreen("result");
+      } catch {}
+    }
+  }, []);
+
+  const WEEK_PROMPT = `你是专业家庭营养师，擅长广东、顺德、佛山家常菜。为四口之家（含老人和小孩）制定本周7天晚餐菜单。
+
 规则：
-1. 口味清淡不辣，低盐低油，儿童友好，老人易消化，家常便饭风格
-2. 每天主蛋白质要不同，轮换：鸡肉、猪肉、牛肉、鸭肉、豆腐蛋类
-3. 海鲜限制：整周最多2天含海鲜，其他天绝不出现任何海鲜食材
-4. 相邻两天约30%食材重叠（利用剩菜），leftover_note说明食材衔接
-5. 每天3-4道菜，荤素均衡，7天菜名不重复
-严格只返回JSON：{"week":[{"day":"周一","theme":"主题4-6字","protein":"主蛋白","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"20分钟","tip":"贴士12字内","nutrition":"营养8字内"}],"cook_order":"一句话","total_time":"45分钟","shopping":[{"category":"肉类","emoji":"🥩","items":[{"name":"","amount":"","note":""}]}]}]}`;
+1. 口味清淡不辣，低盐低油，儿童友好，老人易消化
+2. 菜式以广东、顺德、佛山传统家常菜为主，也可参考儿童喜欢的菜式（如下厨房好评菜式风格）
+3. 每天4-5道菜（含汤和主食），必须有2道荤菜，荤素均衡
+4. 每天最多只能有1道菜含鱼或海鲜，全周最多2天含鱼或海鲜
+5. 每天主蛋白质要不同，轮换：鸡肉、猪肉、牛肉、鸭肉、豆腐蛋类
+6. 相邻两天约30%食材重叠（利用剩菜），leftover_note说明食材衔接
+7. 7天菜名不重复
 
-  const fetchWeekPlan = async () => {
+严格只返回JSON，无任何其他文字：
+{"week":[{"day":"周一","theme":"主题4-6字","protein":"主蛋白","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"20分钟","tip":"贴士12字内","nutrition":"营养8字内"}],"cook_order":"一句话","total_time":"45分钟","shopping":[{"category":"肉类","emoji":"🥩","items":[{"name":"","amount":"","note":""}]}]}]}`;
+
+  const fetchWeekPlan = async (forceNew = false) => {
+    // 检查缓存，同一周不重新生成
+    if (!forceNew) {
+      const cached = localStorage.getItem(weekKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setWeekPlan(parsed);
+          setActiveDay(0); setActiveTab("menu"); setCheckedItems({}); setShopScope("week"); setShareText("");
+          setScreen("result");
+          return;
+        } catch {}
+      }
+    }
+
     setLoading(true); setError(""); setWeekPlan(null);
     try {
-      const text = await callDeepSeek(WEEK_PROMPT, 4000);
+      const text = await callDeepSeek(WEEK_PROMPT, 5000);
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
       setWeekPlan(parsed.week);
+      // 存入本地缓存
+      localStorage.setItem(weekKey, JSON.stringify(parsed.week));
       setActiveDay(0); setActiveTab("menu"); setCheckedItems({}); setShopScope("week"); setShareText("");
       setScreen("result");
+
+      // 本周第一次生成，发送邮件
+      const emailSent = localStorage.getItem(emailSentKey);
+      if (!emailSent) {
+        await sendEmailNotification(parsed.week);
+        localStorage.setItem(emailSentKey, "1");
+        setEmailMsg("📧 本周菜单已发送到你的邮箱");
+        setTimeout(() => setEmailMsg(""), 4000);
+      }
     } catch (e) { setError(e.message || "生成失败，请重试"); }
     finally { setLoading(false); }
   };
+
+  // 首次打开自动加载
+  useEffect(() => {
+    const cached = localStorage.getItem(weekKey);
+    if (!cached) {
+      // 没有缓存，不自动生成，等用户点按钮
+    }
+  }, []);
 
   const regenDay = async (dayIdx) => {
     setRegenLoading(dayIdx);
     const prevDay = dayIdx > 0 ? weekPlan[dayIdx - 1] : null;
     const existingProteins = weekPlan.map((d, i) => i !== dayIdx ? d.protein : null).filter(Boolean);
     const seafoodDays = weekPlan.filter((d, i) => i !== dayIdx && d.has_seafood).length;
-    const prompt = `重新生成${DAYS[dayIdx]}晚餐菜单（四口之家，清淡不辣低盐，家常便饭）。本周其他天蛋白质：${existingProteins.join("、")}，今天换一种。本周已有${seafoodDays}天海鲜，${seafoodDays >= 2 ? "今天绝对不能有海鲜" : "可酌情加海鲜"}。${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今天30%食材可重叠。` : ""}严格只返回单天JSON：{"day":"${DAYS[dayIdx]}","theme":"","protein":"","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"","tip":"","nutrition":""}],"cook_order":"","total_time":"","shopping":[{"category":"","emoji":"","items":[{"name":"","amount":"","note":""}]}]}`;
+    const prompt = `重新生成${DAYS[dayIdx]}晚餐菜单（四口之家，广东家常菜，清淡不辣低盐）。
+本周其他天蛋白质：${existingProteins.join("、")}，今天换一种。
+本周已有${seafoodDays}天含鱼/海鲜，${seafoodDays >= 2 ? "今天绝对不能有任何鱼或海鲜" : "可有最多1道含鱼或海鲜的菜"}。
+${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今天30%食材可重叠。` : ""}
+每天必须有2道荤菜，共4-5道菜含汤和主食。
+严格只返回单天JSON：{"day":"${DAYS[dayIdx]}","theme":"","protein":"","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"","tip":"","nutrition":""}],"cook_order":"","total_time":"","shopping":[{"category":"","emoji":"","items":[{"name":"","amount":"","note":""}]}]}`;
     try {
-      const text = await callDeepSeek(prompt, 1500);
+      const text = await callDeepSeek(prompt, 2000);
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      setWeekPlan(prev => prev.map((d, i) => i === dayIdx ? parsed : d));
+      const newPlan = weekPlan.map((d, i) => i === dayIdx ? parsed : d);
+      setWeekPlan(newPlan);
+      localStorage.setItem(weekKey, JSON.stringify(newPlan));
     } catch {}
     finally { setRegenLoading(null); }
   };
@@ -132,9 +230,11 @@ export default function DinnerPlanner() {
     setEditingDish({ dayIdx, dishIdx });
   };
   const saveEdit = () => {
-    setWeekPlan(prev => prev.map((day, di) => di !== editingDish.dayIdx ? day : {
+    const newPlan = weekPlan.map((day, di) => di !== editingDish.dayIdx ? day : {
       ...day, dishes: day.dishes.map((dish, dishi) => dishi === editingDish.dishIdx ? { ...dish, ...editForm } : dish)
-    }));
+    });
+    setWeekPlan(newPlan);
+    localStorage.setItem(weekKey, JSON.stringify(newPlan));
     setEditingDish(null);
   };
 
@@ -180,6 +280,8 @@ export default function DinnerPlanner() {
         .h-cta{padding:22px 22px 44px}
         .btn-p{width:100%;padding:17px;background:linear-gradient(135deg,#e08818,#c06010);border:none;border-radius:15px;color:#fff;font-family:'Noto Sans SC',sans-serif;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(192,96,16,.26);transition:all .2s}
         .btn-p:hover{transform:translateY(-1px)}
+        .btn-ghost{width:100%;padding:13px;background:#fff;border:1.5px solid #e0d8cc;border-radius:14px;color:#8a7a60;font-family:'Noto Sans SC',sans-serif;font-size:14px;cursor:pointer;margin-top:10px;transition:all .2s}
+        .btn-ghost:hover{border-color:#c87818;color:#c87818}
         .ld-sc{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;background:#f8f6f2;padding:40px;text-align:center}
         .ld-bowl{font-size:60px;animation:wb 1.2s ease-in-out infinite}
         @keyframes wb{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(9deg)}}
@@ -199,6 +301,8 @@ export default function DinnerPlanner() {
         .top-r{display:flex;align-items:center;gap:8px}
         .wk-lbl{font-size:12px;color:#b8a888}
         .btn-rw{padding:6px 11px;background:#fff8e6;border:1px solid #eac860;border-radius:9px;color:#a87018;font-size:12px;font-weight:600;font-family:'Noto Sans SC',sans-serif;cursor:pointer}
+        .email-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#487838;color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;z-index:999;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2);animation:tst .3s ease}
+        @keyframes tst{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
         .d-nav{background:#fff;border-bottom:1px solid #e8e2d8;padding:10px 0 0;overflow-x:auto;scrollbar-width:none;display:flex}
         .d-nav::-webkit-scrollbar{display:none}
         .d-tab{flex-shrink:0;padding:7px 12px 11px;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;position:relative;min-width:54px}
@@ -288,13 +392,15 @@ export default function DinnerPlanner() {
         .btn-sv{flex:2;padding:13px;background:linear-gradient(135deg,#e08818,#c06010);border:none;border-radius:12px;font-size:14px;font-weight:700;color:#fff;font-family:'Noto Sans SC',sans-serif;cursor:pointer}
       `}</style>
 
+      {emailMsg && <div className="email-toast">{emailMsg}</div>}
+
       {loading && (
         <div className="sc ld-sc">
           <div className="ld-bowl">🥘</div>
           <div className="ld-t">AI 正在规划本周菜单…</div>
-          <div className="ld-s">正在为四口之家精心搭配7天晚餐</div>
+          <div className="ld-s">正在为四口之家精心搭配广东家常菜</div>
           <div className="ld-steps">
-            {["规划每日蛋白质轮换","考虑相邻食材衔接利用剩菜","生成整周购物清单"].map((s,i) => (
+            {["参考广东顺德佛山菜式","规划每日蛋白质轮换","生成整周购物清单"].map((s,i) => (
               <div key={i} className="ld-step">
                 <span className="dot" style={{animationDelay:`${i*0.4}s`}} />{s}
               </div>
@@ -307,7 +413,7 @@ export default function DinnerPlanner() {
         <div className="sc er-sc">
           <span className="er-ic">😕</span>
           <p className="er-msg">{error}</p>
-          <button className="btn-p" style={{maxWidth:280}} onClick={fetchWeekPlan}>重新生成</button>
+          <button className="btn-p" style={{maxWidth:280}} onClick={() => fetchWeekPlan(true)}>重新生成</button>
         </div>
       )}
 
@@ -316,19 +422,19 @@ export default function DinnerPlanner() {
           <div className="h-hero">
             <div className="h-tag">✨ AI 家庭晚餐助手</div>
             <h1 className="h-title">本周<br /><span>吃什么？</span></h1>
-            <p className="h-sub">一次生成7天晚餐菜谱<br />营养均衡 · 减少剩菜 · 轻松购物</p>
+            <p className="h-sub">广东家常菜 · 7天菜谱固定不变<br />营养均衡 · 减少剩菜 · 发送到邮箱</p>
           </div>
           <div className="h-chips">
-            {["👨‍👩‍👧‍👦 四口之家","🌿 清淡不辣","💧 低盐少油","🧒 儿童友好","🚫🦐 少海鲜"].map((c,i) => (
+            {["👨‍👩‍👧‍👦 四口之家","🌿 清淡不辣","🥢 广东家常菜","🧒 儿童友好","🚫🦐 少海鲜"].map((c,i) => (
               <span key={i} className="chip">{c}</span>
             ))}
           </div>
           <div className="h-feats">
             {[
-              {ic:"🔄",t:"蛋白质每天轮换",d:"鸡猪牛鸭豆蛋轮流，营养全面"},
-              {ic:"♻️",t:"剩菜巧利用",d:"相邻两天30%食材重叠，减少浪费"},
-              {ic:"✏️",t:"随时手动修改",d:"每道菜可单独编辑，灵活调整"},
-              {ic:"📤",t:"一键转发清单",d:"购物清单发给家人，协作购物"},
+              {ic:"📌",t:"本周菜单固定",d:"同一周重复打开菜单不变"},
+              {ic:"📧",t:"自动发邮件",d:"每周首次生成自动发到邮箱"},
+              {ic:"✏️",t:"随时手动修改",d:"每道菜可单独编辑调整"},
+              {ic:"📤",t:"一键转发清单",d:"购物清单发给家人协作购物"},
             ].map((f,i) => (
               <div key={i} className="feat">
                 <span className="feat-ic">{f.ic}</span>
@@ -338,7 +444,7 @@ export default function DinnerPlanner() {
             ))}
           </div>
           <div className="h-cta">
-            <button className="btn-p" onClick={fetchWeekPlan}>生成本周7天菜单 ✨</button>
+            <button className="btn-p" onClick={() => fetchWeekPlan(false)}>生成本周7天菜单 ✨</button>
           </div>
         </div>
       )}
@@ -349,7 +455,7 @@ export default function DinnerPlanner() {
             <button className="bk-btn" onClick={() => setScreen("home")}>← 首页</button>
             <div className="top-r">
               <span className="wk-lbl">{weekLabel}</span>
-              <button className="btn-rw" onClick={fetchWeekPlan}>🔄 换菜单</button>
+              <button className="btn-rw" onClick={() => fetchWeekPlan(true)}>🔄 换菜单</button>
             </div>
           </div>
           <div className="d-nav">
