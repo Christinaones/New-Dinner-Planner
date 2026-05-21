@@ -14,7 +14,7 @@ exports.handler = async function(event) {
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
-        max_tokens: maxTokens || 4000,
+        max_tokens: maxTokens || 5000,
         messages: [{ role: 'user', content: prompt }],
       }),
     })
