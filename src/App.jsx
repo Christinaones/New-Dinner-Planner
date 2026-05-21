@@ -60,7 +60,8 @@ function proteinColor(p) {
   return "#707070";
 }
 
-async function callAPI(prompt, maxTokens = 4000) {
+// 调用后端 /api/chat，API Key 安全存在服务器环境变量里
+async function callDeepSeek(prompt, maxTokens = 4000) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -103,7 +104,7 @@ export default function DinnerPlanner() {
   const fetchWeekPlan = async () => {
     setLoading(true); setError(""); setWeekPlan(null);
     try {
-      const text = await callAPI(WEEK_PROMPT, 4000);
+      const text = await callDeepSeek(WEEK_PROMPT, 4000);
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
       setWeekPlan(parsed.week);
       setActiveDay(0); setActiveTab("menu"); setCheckedItems({}); setShopScope("week"); setShareText("");
@@ -119,16 +120,21 @@ export default function DinnerPlanner() {
     const seafoodDays = weekPlan.filter((d, i) => i !== dayIdx && d.has_seafood).length;
     const prompt = `重新生成${DAYS[dayIdx]}晚餐菜单（四口之家，清淡不辣低盐，家常便饭）。本周其他天蛋白质：${existingProteins.join("、")}，今天换一种。本周已有${seafoodDays}天海鲜，${seafoodDays >= 2 ? "今天绝对不能有海鲜" : "可酌情加海鲜"}。${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今天30%食材可重叠。` : ""}严格只返回单天JSON：{"day":"${DAYS[dayIdx]}","theme":"","protein":"","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"","tip":"","nutrition":""}],"cook_order":"","total_time":"","shopping":[{"category":"","emoji":"","items":[{"name":"","amount":"","note":""}]}]}`;
     try {
-      const text = await callAPI(prompt, 1500);
+      const text = await callDeepSeek(prompt, 1500);
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
       setWeekPlan(prev => prev.map((d, i) => i === dayIdx ? parsed : d));
     } catch {}
     finally { setRegenLoading(null); }
   };
 
-  const openEdit = (dayIdx, dishIdx) => { setEditForm({ ...weekPlan[dayIdx].dishes[dishIdx] }); setEditingDish({ dayIdx, dishIdx }); };
+  const openEdit = (dayIdx, dishIdx) => {
+    setEditForm({ ...weekPlan[dayIdx].dishes[dishIdx] });
+    setEditingDish({ dayIdx, dishIdx });
+  };
   const saveEdit = () => {
-    setWeekPlan(prev => prev.map((day, di) => di !== editingDish.dayIdx ? day : { ...day, dishes: day.dishes.map((dish, dishi) => dishi === editingDish.dishIdx ? { ...dish, ...editForm } : dish) }));
+    setWeekPlan(prev => prev.map((day, di) => di !== editingDish.dayIdx ? day : {
+      ...day, dishes: day.dishes.map((dish, dishi) => dishi === editingDish.dishIdx ? { ...dish, ...editForm } : dish)
+    }));
     setEditingDish(null);
   };
 
@@ -137,7 +143,6 @@ export default function DinnerPlanner() {
     setShareText(text);
     setTimeout(() => { shareRef.current?.select(); }, 100);
   };
-
   const copyShareText = () => {
     if (shareRef.current) {
       shareRef.current.select();
@@ -174,7 +179,7 @@ export default function DinnerPlanner() {
         .feat-d{font-size:11px;color:#9a8e78;line-height:1.5}
         .h-cta{padding:22px 22px 44px}
         .btn-p{width:100%;padding:17px;background:linear-gradient(135deg,#e08818,#c06010);border:none;border-radius:15px;color:#fff;font-family:'Noto Sans SC',sans-serif;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(192,96,16,.26);transition:all .2s}
-        .btn-p:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(192,96,16,.35)}
+        .btn-p:hover{transform:translateY(-1px)}
         .ld-sc{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;background:#f8f6f2;padding:40px;text-align:center}
         .ld-bowl{font-size:60px;animation:wb 1.2s ease-in-out infinite}
         @keyframes wb{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(9deg)}}
@@ -193,14 +198,13 @@ export default function DinnerPlanner() {
         .bk-btn:hover{color:#c87818}
         .top-r{display:flex;align-items:center;gap:8px}
         .wk-lbl{font-size:12px;color:#b8a888}
-        .btn-rw{padding:6px 11px;background:#fff8e6;border:1px solid #eac860;border-radius:9px;color:#a87018;font-size:12px;font-weight:600;font-family:'Noto Sans SC',sans-serif;cursor:pointer;transition:all .15s}
-        .btn-rw:hover{background:#ffeea0}
+        .btn-rw{padding:6px 11px;background:#fff8e6;border:1px solid #eac860;border-radius:9px;color:#a87018;font-size:12px;font-weight:600;font-family:'Noto Sans SC',sans-serif;cursor:pointer}
         .d-nav{background:#fff;border-bottom:1px solid #e8e2d8;padding:10px 0 0;overflow-x:auto;scrollbar-width:none;display:flex}
         .d-nav::-webkit-scrollbar{display:none}
-        .d-tab{flex-shrink:0;padding:7px 12px 11px;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;position:relative;min-width:54px;transition:all .15s}
+        .d-tab{flex-shrink:0;padding:7px 12px 11px;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;position:relative;min-width:54px}
         .d-tab.act::after{content:'';position:absolute;bottom:0;left:18%;right:18%;height:2.5px;background:#c87818;border-radius:2px}
         .d-em{font-size:17px}
-        .d-lbl{font-size:11px;font-weight:600;color:#c0b098;transition:color .15s}
+        .d-lbl{font-size:11px;font-weight:600;color:#c0b098}
         .d-tab.act .d-lbl{color:#c87818}
         .d-pro{font-size:9px;padding:1px 5px;border-radius:5px;font-weight:600;white-space:nowrap}
         .sf-dot{position:absolute;top:5px;right:7px;width:6px;height:6px;border-radius:50%;background:#1870b8}
@@ -211,8 +215,7 @@ export default function DinnerPlanner() {
         .ban-theme{font-family:'Noto Serif SC',serif;font-size:20px;color:#1c1810;font-weight:700}
         .ban-r{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
         .ban-time{font-size:12px;color:#9a8e78}
-        .btn-rd{padding:5px 10px;background:#fff;border:1px solid #ddd8cc;border-radius:8px;color:#9a8e78;font-size:11px;font-family:'Noto Sans SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .15s}
-        .btn-rd:hover{border-color:#c87818;color:#c87818}
+        .btn-rd{padding:5px 10px;background:#fff;border:1px solid #ddd8cc;border-radius:8px;color:#9a8e78;font-size:11px;font-family:'Noto Sans SC',sans-serif;cursor:pointer;display:flex;align-items:center;gap:4px}
         .btn-rd:disabled{opacity:.4;cursor:not-allowed}
         .rs{animation:sp .7s linear infinite;display:inline-block}
         @keyframes sp{to{transform:rotate(360deg)}}
@@ -220,7 +223,7 @@ export default function DinnerPlanner() {
         .ban-stats{display:flex;gap:7px;flex-wrap:wrap}
         .stat{font-size:11px;padding:3px 9px;border-radius:7px;background:#fff;border:1px solid #e8e2d8;color:#887860}
         .tab-bar{display:flex;margin:12px 14px 0;background:#ede9e2;border-radius:11px;padding:3px;gap:3px}
-        .tab{flex:1;padding:9px;background:none;border:none;font-family:'Noto Sans SC',sans-serif;font-size:13px;color:#9a8e78;border-radius:8px;cursor:pointer;transition:all .15s}
+        .tab{flex:1;padding:9px;background:none;border:none;font-family:'Noto Sans SC',sans-serif;font-size:13px;color:#9a8e78;border-radius:8px;cursor:pointer}
         .tab.act{background:#fff;color:#c87818;font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.08)}
         .dishes{padding:10px 14px 0;display:flex;flex-direction:column;gap:8px}
         .d-card{background:#fff;border:1px solid #e8e2d8;border-radius:15px;padding:13px;display:flex;gap:10px;animation:fi .3s ease both;position:relative}
@@ -243,18 +246,17 @@ export default function DinnerPlanner() {
         .d-t{font-size:11px;color:#b8a888}
         .ed-btn{position:absolute;top:9px;right:9px;width:26px;height:26px;background:#f4f0ea;border:1px solid #e4ddd0;border-radius:7px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
         .d-card:hover .ed-btn{opacity:1}
-        .ed-btn:hover{background:#fff8e6;border-color:#eac860}
         .cook-ord{margin:9px 14px 0;padding:9px 13px;background:#f4f0ea;border-radius:9px;font-size:12px;color:#887860;line-height:1.6}
         .sh-area{padding:10px 14px 0}
         .sh-scope{display:flex;gap:8px;margin-bottom:12px}
-        .sc-btn{padding:7px 14px;background:#fff;border:1.5px solid #e4ddd0;border-radius:9px;font-size:12px;font-weight:600;color:#887860;font-family:'Noto Sans SC',sans-serif;cursor:pointer;transition:all .15s}
+        .sc-btn{padding:7px 14px;background:#fff;border:1.5px solid #e4ddd0;border-radius:9px;font-size:12px;font-weight:600;color:#887860;font-family:'Noto Sans SC',sans-serif;cursor:pointer}
         .sc-btn.act{border-color:#c87818;color:#c87818;background:#fff8ea}
         .sh-cat{margin-bottom:13px;animation:fi .3s ease both}
         .cat-t{font-size:12px;font-weight:700;color:#b8a888;letter-spacing:.5px;padding:7px 0 5px;border-bottom:1px solid #e8e2d8;margin-bottom:4px}
         .sh-it{display:flex;align-items:center;gap:10px;padding:10px 7px;border-radius:9px;cursor:pointer;transition:background .12s}
         .sh-it:hover{background:#f4f0ea}
         .sh-it.ck{opacity:.45}
-        .sh-chk{width:20px;height:20px;border:1.5px solid #d4ccbc;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;transition:all .15s}
+        .sh-chk{width:20px;height:20px;border:1.5px solid #d4ccbc;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px}
         .sh-it.ck .sh-chk{background:#c87818;border-color:#c87818;color:#fff}
         .sh-info{flex:1}
         .sh-nm{font-size:14px;color:#2a2418}
@@ -270,15 +272,14 @@ export default function DinnerPlanner() {
         .share-ta{width:100%;min-height:120px;padding:10px 12px;background:#f8f6f2;border:1.5px solid #e4ddd0;border-radius:9px;font-size:12px;color:#2a2418;font-family:'Noto Sans SC',sans-serif;resize:vertical;line-height:1.6}
         .copy-hint{font-size:11px;color:#9a8e78;margin-top:6px}
         .copy-ok{font-size:12px;color:#487838;font-weight:600;margin-top:6px}
-        .m-ov{position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:100;display:flex;align-items:flex-end;justify-content:center;animation:ov .2s ease}
-        @keyframes ov{from{opacity:0}to{opacity:1}}
+        .m-ov{position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:100;display:flex;align-items:flex-end;justify-content:center}
         .m-box{width:100%;max-width:430px;background:#f8f6f2;border-radius:22px 22px 0 0;padding:22px 18px 40px;animation:su .25s ease}
         @keyframes su{from{transform:translateY(36px);opacity:0}to{transform:translateY(0);opacity:1}}
         .m-hdl{width:34px;height:4px;background:#e0d8cc;border-radius:2px;margin:0 auto 18px}
         .m-title{font-size:17px;font-weight:700;color:#1c1810;margin-bottom:16px}
         .f-row{margin-bottom:13px}
         .f-lbl{font-size:11px;color:#9a8e78;font-weight:600;letter-spacing:.4px;margin-bottom:5px}
-        .f-in{width:100%;padding:11px 13px;background:#fff;border:1.5px solid #e4ddd0;border-radius:10px;font-size:14px;color:#1c1810;font-family:'Noto Sans SC',sans-serif;outline:none;transition:border-color .15s}
+        .f-in{width:100%;padding:11px 13px;background:#fff;border:1.5px solid #e4ddd0;border-radius:10px;font-size:14px;color:#1c1810;font-family:'Noto Sans SC',sans-serif;outline:none}
         .f-in:focus{border-color:#c87818}
         .f-row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
         .f-sel{width:100%;padding:11px 13px;background:#fff;border:1.5px solid #e4ddd0;border-radius:10px;font-size:14px;color:#1c1810;font-family:'Noto Sans SC',sans-serif;outline:none;appearance:none;cursor:pointer}
@@ -293,9 +294,9 @@ export default function DinnerPlanner() {
           <div className="ld-t">AI 正在规划本周菜单…</div>
           <div className="ld-s">正在为四口之家精心搭配7天晚餐</div>
           <div className="ld-steps">
-            {["规划每日蛋白质轮换", "考虑相邻食材衔接利用剩菜", "生成整周购物清单"].map((s, i) => (
+            {["规划每日蛋白质轮换","考虑相邻食材衔接利用剩菜","生成整周购物清单"].map((s,i) => (
               <div key={i} className="ld-step">
-                <span className="dot" style={{ animationDelay: `${i * 0.4}s` }} />{s}
+                <span className="dot" style={{animationDelay:`${i*0.4}s`}} />{s}
               </div>
             ))}
           </div>
@@ -306,7 +307,7 @@ export default function DinnerPlanner() {
         <div className="sc er-sc">
           <span className="er-ic">😕</span>
           <p className="er-msg">{error}</p>
-          <button className="btn-p" style={{ maxWidth: 280 }} onClick={fetchWeekPlan}>重新生成</button>
+          <button className="btn-p" style={{maxWidth:280}} onClick={fetchWeekPlan}>重新生成</button>
         </div>
       )}
 
@@ -351,21 +352,19 @@ export default function DinnerPlanner() {
               <button className="btn-rw" onClick={fetchWeekPlan}>🔄 换菜单</button>
             </div>
           </div>
-
           <div className="d-nav">
-            {weekPlan.map((day, i) => (
-              <button key={i} className={`d-tab ${activeDay === i ? "act" : ""}`}
+            {weekPlan.map((day,i) => (
+              <button key={i} className={`d-tab ${activeDay===i?"act":""}`}
                 onClick={() => { setActiveDay(i); setActiveTab("menu"); }}>
                 {day.has_seafood && <span className="sf-dot" />}
                 <span className="d-em">{DAY_EMOJIS[i]}</span>
                 <span className="d-lbl">{day.day}</span>
-                <span className="d-pro" style={{ background: proteinColor(day.protein)+"1a", color: proteinColor(day.protein) }}>
+                <span className="d-pro" style={{background:proteinColor(day.protein)+"1a",color:proteinColor(day.protein)}}>
                   {day.protein}
                 </span>
               </button>
             ))}
           </div>
-
           {currentDay && (
             <div className="d-ban" key={activeDay}>
               <div className="ban-top">
@@ -375,31 +374,29 @@ export default function DinnerPlanner() {
                 </div>
                 <div className="ban-r">
                   <span className="ban-time">⏱ {currentDay.total_time}</span>
-                  <button className="btn-rd" onClick={() => regenDay(activeDay)} disabled={regenLoading === activeDay}>
-                    {regenLoading === activeDay ? <><span className="rs">↻</span> 生成中</> : <>↻ 换这天</>}
+                  <button className="btn-rd" onClick={() => regenDay(activeDay)} disabled={regenLoading===activeDay}>
+                    {regenLoading===activeDay ? <><span className="rs">↻</span> 生成中</> : <>↻ 换这天</>}
                   </button>
                 </div>
               </div>
               {currentDay.leftover_note && <div className="lo-note">♻️ {currentDay.leftover_note}</div>}
               <div className="ban-stats">
-                <span className="stat" style={{ color: proteinColor(currentDay.protein), background: proteinColor(currentDay.protein)+"18" }}>🥩 {currentDay.protein}</span>
-                {currentDay.has_seafood && <span className="stat" style={{ color:"#1870b8", background:"#ddf0ff" }}>🐟 含海鲜</span>}
+                <span className="stat" style={{color:proteinColor(currentDay.protein),background:proteinColor(currentDay.protein)+"18"}}>🥩 {currentDay.protein}</span>
+                {currentDay.has_seafood && <span className="stat" style={{color:"#1870b8",background:"#ddf0ff"}}>🐟 含海鲜</span>}
                 <span className="stat">👨‍🍳 {currentDay.cook_order}</span>
               </div>
             </div>
           )}
-
           <div className="tab-bar">
             <button className={`tab ${activeTab==="menu"?"act":""}`} onClick={() => setActiveTab("menu")}>🍽 菜单</button>
             <button className={`tab ${activeTab==="shopping"?"act":""}`} onClick={() => setActiveTab("shopping")}>🛒 购物</button>
           </div>
-
           {activeTab === "menu" && currentDay && (
             <>
               <div className="dishes">
-                {currentDay.dishes.map((dish, di) => (
-                  <div key={di} className="d-card" style={{ animationDelay: `${di*0.06}s` }}>
-                    <button className="ed-btn" onClick={() => openEdit(activeDay, di)}>✏️</button>
+                {currentDay.dishes.map((dish,di) => (
+                  <div key={di} className="d-card" style={{animationDelay:`${di*0.06}s`}}>
+                    <button className="ed-btn" onClick={() => openEdit(activeDay,di)}>✏️</button>
                     <div className="d-l">
                       <span className="d-em2">{dish.emoji}</span>
                       <span className={`d-ty ty-${dish.type}`}>{dish.type}</span>
@@ -419,17 +416,16 @@ export default function DinnerPlanner() {
               <div className="cook-ord">👨‍🍳 {currentDay.cook_order}</div>
             </>
           )}
-
           {activeTab === "shopping" && (
             <div className="sh-area">
               <div className="sh-scope">
                 <button className={`sc-btn ${shopScope==="week"?"act":""}`} onClick={() => { setShopScope("week"); setShareText(""); }}>📅 全周清单</button>
                 <button className={`sc-btn ${shopScope==="day"?"act":""}`} onClick={() => { setShopScope("day"); setShareText(""); }}>📋 {currentDay?.day}</button>
               </div>
-              {shoppingList.map((cat, ci) => (
-                <div key={`${shopScope}-${ci}`} className="sh-cat" style={{ animationDelay: `${ci*0.05}s` }}>
+              {shoppingList.map((cat,ci) => (
+                <div key={`${shopScope}-${ci}`} className="sh-cat" style={{animationDelay:`${ci*0.05}s`}}>
                   <div className="cat-t">{cat.emoji} {cat.category}</div>
-                  {(cat.items||[]).map((item, ii) => {
+                  {(cat.items||[]).map((item,ii) => {
                     const key = `${shopScope}-${ci}-${ii}`;
                     return (
                       <div key={ii} className={`sh-it ${checkedItems[key]?"ck":""}`} onClick={() => toggleCheck(key)}>
