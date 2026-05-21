@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 
-const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
-const DAY_EMOJIS = ["🌱", "🌿", "🍃", "🌾", "🍂", "🌻", "🌸"];
+const DAYS = ["第一天", "第二天", "第三天"];
+const DAY_EMOJIS = ["🌱", "🌿", "🍃"];
 
 // 获取本周的唯一标识（年份+第几周）
 function getWeekKey() {
@@ -145,19 +145,19 @@ export default function DinnerPlanner() {
     }
   }, []);
 
-  const WEEK_PROMPT = `你是专业家庭营养师，擅长广东、顺德、佛山家常菜。为四口之家（含老人和小孩）制定本周7天晚餐菜单。
+  const WEEK_PROMPT = `你是专业家庭营养师，擅长广东、顺德、佛山家常菜。为四口之家（含老人和小孩）制定3天晚餐菜单。
 
 规则：
 1. 口味清淡不辣，低盐低油，儿童友好，老人易消化
-2. 菜式以广东、顺德、佛山传统家常菜为主，也可参考儿童喜欢的菜式（如下厨房好评菜式风格）
-3. 每天4-5道菜（含汤和主食），必须有2道荤菜，荤素均衡
-4. 每天最多只能有1道菜含鱼或海鲜，全周最多2天含鱼或海鲜
+2. 菜式以广东、顺德、佛山传统家常菜为主，也可参考儿童喜欢的菜式
+3. 每天4道菜（含汤和主食），必须有2道荤菜，荤素均衡
+4. 每天最多只能有1道菜含鱼或海鲜，3天最多1天含鱼或海鲜
 5. 每天主蛋白质要不同，轮换：鸡肉、猪肉、牛肉、鸭肉、豆腐蛋类
 6. 相邻两天约30%食材重叠（利用剩菜），leftover_note说明食材衔接
-7. 7天菜名不重复
+7. 3天菜名不重复
 
 严格只返回JSON，无任何其他文字：
-{"week":[{"day":"周一","theme":"主题4-6字","protein":"主蛋白","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"20分钟","tip":"贴士12字内","nutrition":"营养8字内"}],"cook_order":"一句话","total_time":"45分钟","shopping":[{"category":"肉类","emoji":"🥩","items":[{"name":"","amount":"","note":""}]}]}]}`;
+{"week":[{"day":"第一天","theme":"主题4-6字","protein":"主蛋白","has_seafood":false,"leftover_note":"","dishes":[{"name":"","type":"荤菜|素菜|汤羹|主食","emoji":"","difficulty":"简单|中等|稍难","time":"20分钟"}],"cook_order":"一句话","total_time":"45分钟","shopping":[{"category":"肉类","emoji":"🥩","items":[{"name":"","amount":"","note":""}]}]}]}`;
 
   const fetchWeekPlan = async (forceNew = false) => {
     // 检查缓存，同一周不重新生成
@@ -176,7 +176,7 @@ export default function DinnerPlanner() {
 
     setLoading(true); setError(""); setWeekPlan(null);
     try {
-      const text = await callDeepSeek(WEEK_PROMPT, 5000);
+      const text = await callDeepSeek(WEEK_PROMPT, 3000);
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
       setWeekPlan(parsed.week);
       // 存入本地缓存
@@ -398,7 +398,7 @@ ${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今
         <div className="sc ld-sc">
           <div className="ld-bowl">🥘</div>
           <div className="ld-t">AI 正在规划本周菜单…</div>
-          <div className="ld-s">正在为四口之家精心搭配广东家常菜</div>
+          <div className="ld-s">正在为四口之家搭配广东家常菜</div>
           <div className="ld-steps">
             {["参考广东顺德佛山菜式","规划每日蛋白质轮换","生成整周购物清单"].map((s,i) => (
               <div key={i} className="ld-step">
@@ -422,7 +422,7 @@ ${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今
           <div className="h-hero">
             <div className="h-tag">✨ AI 家庭晚餐助手</div>
             <h1 className="h-title">本周<br /><span>吃什么？</span></h1>
-            <p className="h-sub">广东家常菜 · 7天菜谱固定不变<br />营养均衡 · 减少剩菜 · 发送到邮箱</p>
+            <p className="h-sub">广东家常菜 · 3天菜谱固定不变<br />营养均衡 · 减少剩菜 · 发送到邮箱</p>
           </div>
           <div className="h-chips">
             {["👨‍👩‍👧‍👦 四口之家","🌿 清淡不辣","🥢 广东家常菜","🧒 儿童友好","🚫🦐 少海鲜"].map((c,i) => (
@@ -444,7 +444,7 @@ ${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今
             ))}
           </div>
           <div className="h-cta">
-            <button className="btn-p" onClick={() => fetchWeekPlan(false)}>生成本周7天菜单 ✨</button>
+            <button className="btn-p" onClick={() => fetchWeekPlan(false)}>生成3天晚餐菜单 ✨</button>
           </div>
         </div>
       )}
@@ -509,8 +509,6 @@ ${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今
                     </div>
                     <div className="d-c">
                       <div className="d-nm">{dish.name}</div>
-                      <div className="d-tip">💡 {dish.tip}</div>
-                      <div className="d-nut">🌿 {dish.nutrition}</div>
                     </div>
                     <div className="d-r">
                       <span className={`diff df-${dish.difficulty}`}>{dish.difficulty}</span>
@@ -525,7 +523,7 @@ ${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今
           {activeTab === "shopping" && (
             <div className="sh-area">
               <div className="sh-scope">
-                <button className={`sc-btn ${shopScope==="week"?"act":""}`} onClick={() => { setShopScope("week"); setShareText(""); }}>📅 全周清单</button>
+                <button className={`sc-btn ${shopScope==="week"?"act":""}`} onClick={() => { setShopScope("week"); setShareText(""); }}>📅 3天清单</button>
                 <button className={`sc-btn ${shopScope==="day"?"act":""}`} onClick={() => { setShopScope("day"); setShareText(""); }}>📋 {currentDay?.day}</button>
               </div>
               {shoppingList.map((cat,ci) => (
@@ -598,14 +596,7 @@ ${prevDay ? `昨天菜单：${prevDay.dishes.map(d => d.name).join("、")}，今
                 <input className="f-in" value={editForm.emoji||""} onChange={e => setEditForm(p=>({...p,emoji:e.target.value}))} />
               </div>
             </div>
-            <div className="f-row">
-              <div className="f-lbl">烹饪小贴士</div>
-              <input className="f-in" value={editForm.tip||""} onChange={e => setEditForm(p=>({...p,tip:e.target.value}))} />
-            </div>
-            <div className="f-row">
-              <div className="f-lbl">营养亮点</div>
-              <input className="f-in" value={editForm.nutrition||""} onChange={e => setEditForm(p=>({...p,nutrition:e.target.value}))} />
-            </div>
+
             <div className="m-acts">
               <button className="btn-can" onClick={() => setEditingDish(null)}>取消</button>
               <button className="btn-sv" onClick={saveEdit}>保存修改</button>
